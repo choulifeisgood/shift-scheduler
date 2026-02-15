@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>排班管理系統</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f1f5f9; --card: #ffffff; --border: #e2e8f0;
+  --text: #1e293b; --text2: #64748b; --primary: #3b82f6;
+  --primary-hover: #2563eb; --morning: #f59e0b; --afternoon: #3b82f6;
+  --night: #7c3aed; --danger: #ef4444; --success: #10b981;
+  --radius: 8px; --shadow: 0 1px 3px rgba(0,0,0,.1);
+}
+body { font-family: "Segoe UI","Microsoft JhengHei",sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+button { cursor: pointer; font-family: inherit; }
+select, input { font-family: inherit; }
+
+/* ===== Layout ===== */
+#app { display: flex; flex-direction: column; min-height: 100vh; }
+.header { background: linear-gradient(135deg, #1e40af, #3b82f6); color: #fff; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.header h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: .5px; }
+.header-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.header-controls label { font-size: .85rem; display: flex; align-items: center; gap: 4px; }
+.header-controls select, .header-controls input { padding: 6px 10px; border: 1px solid rgba(255,255,255,.3); border-radius: var(--radius); background: rgba(255,255,255,.15); color: #fff; font-size: .85rem; }
+.header-controls select option { color: #333; background: #fff; }
+.btn-generate { background: #fbbf24; color: #1e293b; border: none; padding: 8px 20px; border-radius: var(--radius); font-weight: 700; font-size: .9rem; transition: background .2s; }
+.btn-generate:hover { background: #f59e0b; }
+
+.main-layout { display: flex; flex: 1; overflow: hidden; }
+
+/* Sidebar */
+.sidebar { width: 320px; min-width: 320px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; }
+.sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
+.sidebar-section h3 { font-size: .9rem; color: var(--text2); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }
+.sidebar-toggle { display: none; background: var(--primary); color: #fff; border: none; padding: 8px 16px; font-size: .85rem; border-radius: var(--radius); }
+
+/* Constraint Builder */
+.cb-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.cb-row select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: .85rem; background: #fff; }
+.cb-row span { font-size: .85rem; color: var(--text2); white-space: nowrap; }
+.cb-row .person-select { width: 60px; font-weight: 700; }
+.btn-add-constraint { width: 100%; padding: 8px; background: var(--primary); color: #fff; border: none; border-radius: 6px; font-size: .85rem; font-weight: 600; transition: background .2s; }
+.btn-add-constraint:hover { background: var(--primary-hover); }
+
+/* Constraint List */
+.constraint-list { max-height: 300px; overflow-y: auto; }
+.constraint-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #f8fafc; border-radius: 6px; margin-bottom: 6px; font-size: .82rem; }
+.constraint-item .ci-icon { font-size: 1rem; flex-shrink: 0; }
+.constraint-item .ci-text { flex: 1; }
+.constraint-item .ci-del { background: none; border: none; color: var(--danger); font-size: 1.1rem; padding: 0 4px; opacity: .6; transition: opacity .2s; }
+.constraint-item .ci-del:hover { opacity: 1; }
+
+/* Settings */
+.setting-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.setting-row label { font-size: .85rem; }
+.setting-row input { width: 60px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; text-align: center; font-size: .85rem; }
+
+/* ===== Main Content ===== */
+.content { flex: 1; overflow-y: auto; padding: 20px; }
+.week-block { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; overflow: hidden; }
+.week-header { padding: 12px 16px; font-weight: 700; font-size: .95rem; background: #f8fafc; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.week-header .date-range { font-weight: 400; font-size: .8rem; color: var(--text2); }
+
+.schedule-grid { display: grid; grid-template-columns: 72px repeat(7, 1fr); width: 100%; min-width: 700px; overflow-x: auto; }
+.sg-corner { background: #f8fafc; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); padding: 8px; }
+.sg-day-header { text-align: center; padding: 8px 4px; font-size: .8rem; font-weight: 600; background: #f8fafc; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); }
+.sg-day-header .day-name { display: block; }
+.sg-day-header .day-date { font-weight: 400; color: var(--text2); font-size: .72rem; }
+.sg-day-header.weekend { background: #fef2f2; }
+
+.sg-shift-label { padding: 8px; font-size: .78rem; font-weight: 600; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); display: flex; align-items: center; gap: 4px; writing-mode: horizontal-tb; }
+.sg-shift-label.morning { background: #fffbeb; color: #92400e; }
+.sg-shift-label.afternoon { background: #eff6ff; color: #1e40af; }
+.sg-shift-label.night { background: #f5f3ff; color: #5b21b6; }
+.sg-shift-label .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sg-shift-label.morning .dot { background: var(--morning); }
+.sg-shift-label.afternoon .dot { background: var(--afternoon); }
+.sg-shift-label.night .dot { background: var(--night); }
+
+.sg-cell { padding: 6px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 3px; align-content: flex-start; min-height: 52px; cursor: pointer; transition: background .15s; }
+.sg-cell:hover { background: #f0f9ff; }
+.sg-cell.weekend { background: #fffbfb; }
+.sg-cell.weekend:hover { background: #fef0f0; }
+.sg-cell.has-violation { outline: 2px solid var(--danger); outline-offset: -2px; }
+
+.staff-badge { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 22px; border-radius: 4px; font-size: .72rem; font-weight: 700; color: #fff; }
+
+/* ===== Statistics ===== */
+.stats-block { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; overflow: hidden; }
+.stats-block h3 { padding: 12px 16px; font-size: .9rem; background: #f8fafc; border-bottom: 1px solid var(--border); }
+.stats-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+.stats-table th { padding: 8px 10px; text-align: center; background: #f8fafc; border-bottom: 1px solid var(--border); font-weight: 600; color: var(--text2); position: sticky; top: 0; }
+.stats-table td { padding: 6px 10px; text-align: center; border-bottom: 1px solid #f1f5f9; }
+.stats-table tr:hover td { background: #f0f9ff; }
+.stats-table .person-col { font-weight: 700; text-align: left; }
+.stats-table .highlight-max { color: var(--danger); font-weight: 700; }
+.stats-table .highlight-min { color: var(--success); font-weight: 700; }
+.fairness-score { padding: 12px 16px; font-size: .82rem; color: var(--text2); border-top: 1px solid var(--border); }
+
+/* ===== Action Bar ===== */
+.action-bar { background: var(--card); border-top: 1px solid var(--border); padding: 12px 24px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.action-bar button { padding: 8px 18px; border: 1px solid var(--border); border-radius: 6px; background: #fff; font-size: .82rem; font-weight: 500; transition: all .2s; display: flex; align-items: center; gap: 6px; }
+.action-bar button:hover { background: #f8fafc; border-color: var(--primary); color: var(--primary); }
+.action-bar .btn-icon { font-size: 1rem; }
+
+/* ===== Edit Modal ===== */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.modal-overlay.active { opacity: 1; pointer-events: auto; }
+.modal { background: var(--card); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.2); padding: 24px; width: 400px; max-width: 90vw; max-height: 80vh; overflow-y: auto; }
+.modal h3 { margin-bottom: 16px; font-size: 1rem; }
+.modal-info { font-size: .82rem; color: var(--text2); margin-bottom: 12px; padding: 8px 12px; background: #f8fafc; border-radius: 6px; }
+.modal-staff-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 16px; }
+.modal-staff-btn { padding: 8px; border: 2px solid var(--border); border-radius: 6px; background: #fff; font-weight: 700; font-size: .85rem; transition: all .15s; }
+.modal-staff-btn.selected { border-color: var(--primary); background: #eff6ff; }
+.modal-staff-btn.constrained { opacity: .35; cursor: not-allowed; border-style: dashed; }
+.modal-staff-btn.assigned-other { opacity: .5; border-color: #fbbf24; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.modal-actions button { padding: 8px 20px; border-radius: 6px; font-size: .85rem; font-weight: 600; border: none; }
+.btn-cancel { background: #f1f5f9; color: var(--text); }
+.btn-cancel:hover { background: #e2e8f0; }
+.btn-confirm { background: var(--primary); color: #fff; }
+.btn-confirm:hover { background: var(--primary-hover); }
+
+/* ===== Toast ===== */
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: #1e293b; color: #fff; padding: 12px 24px; border-radius: 8px; font-size: .85rem; transition: transform .3s ease; z-index: 2000; pointer-events: none; }
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ===== Empty State ===== */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text2); }
+.empty-state .es-icon { font-size: 3rem; margin-bottom: 16px; }
+.empty-state h3 { margin-bottom: 8px; color: var(--text); }
+.empty-state p { font-size: .9rem; }
+
+/* ===== Scroll ===== */
+.schedule-scroll { overflow-x: auto; }
+
+/* ===== Print ===== */
+@media print {
+  .header, .sidebar, .action-bar, .sidebar-toggle { display: none !important; }
+  .main-layout { display: block !important; }
+  .content { padding: 0 !important; overflow: visible !important; }
+  .week-block { box-shadow: none !important; break-inside: avoid; page-break-inside: avoid; margin-bottom: 12px !important; }
+  .sg-cell { min-height: 36px !important; }
+  .stats-block { box-shadow: none !important; break-inside: avoid; }
+  body { background: #fff !important; }
+  @page { margin: 10mm; size: landscape; }
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 900px) {
+  .sidebar { display: none; position: fixed; left: 0; top: 0; bottom: 0; z-index: 500; box-shadow: 4px 0 20px rgba(0,0,0,.15); }
+  .sidebar.open { display: flex; }
+  .sidebar-toggle { display: inline-block !important; }
+  .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 499; }
+  .sidebar-overlay.open { display: block; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <button class="sidebar-toggle" onclick="toggleSidebar()">&#9776; 條件設定</button>
+      <h1>排班管理系統</h1>
+    </div>
+    <div class="header-controls">
+      <label>起始日期 <input type="date" id="startDate"></label>
+      <label>週數
+        <select id="weekCount">
+          <option value="4" selected>4 週</option>
+          <option value="5">5 週</option>
+        </select>
+      </label>
+      <label>每班人數 <input type="number" id="staffPerShift" value="5" min="1" max="10" style="width:50px"></label>
+      <button class="btn-generate" onclick="doGenerate()">自動排班</button>
+    </div>
+  </div>
+
+  <div class="main-layout">
+    <!-- Sidebar Overlay (mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-section">
+        <h3>新增條件</h3>
+        <div class="cb-row">
+          <select class="person-select" id="cbPerson"></select>
+          <span>在</span>
+          <select id="cbDay">
+            <option value="1">每週一</option><option value="2">每週二</option>
+            <option value="3">每週三</option><option value="4">每週四</option>
+            <option value="5">每週五</option><option value="6">每週六</option>
+            <option value="0">每週日</option><option value="-1">每天</option>
+          </select>
+        </div>
+        <div class="cb-row">
+          <span>的</span>
+          <select id="cbShift">
+            <option value="0">上午班</option><option value="1">下午班</option>
+            <option value="2">晚上班</option><option value="-1">任何班</option>
+          </select>
+          <select id="cbType">
+            <option value="cannot">不能排班</option>
+            <option value="must">必須排班</option>
+          </select>
+        </div>
+        <button class="btn-add-constraint" onclick="addConstraint()">+ 新增條件</button>
+      </div>
+
+      <div class="sidebar-section" style="flex:1;overflow-y:auto;">
+        <h3>已設定條件 (<span id="constraintCount">0</span>)</h3>
+        <div class="constraint-list" id="constraintList"></div>
+      </div>
+
+      <div class="sidebar-section">
+        <h3>設定</h3>
+        <div class="setting-row">
+          <label>人員數量</label>
+          <input type="number" id="staffCount" value="20" min="2" max="26" onchange="updateStaffCount()">
+        </div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content" id="content">
+      <div class="empty-state" id="emptyState">
+        <div class="es-icon">&#128197;</div>
+        <h3>開始排班</h3>
+        <p>設定條件後，點擊「自動排班」生成排班表。</p>
+      </div>
+      <div id="scheduleArea" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- Action Bar -->
+  <div class="action-bar" id="actionBar" style="display:none;">
+    <button onclick="doPrint()"><span class="btn-icon">&#128424;</span> 列印 / PDF</button>
+    <button onclick="doCopyText()"><span class="btn-icon">&#128203;</span> 複製文字</button>
+    <button onclick="doDownloadHTML()"><span class="btn-icon">&#128228;</span> 下載分享頁面</button>
+    <button onclick="doSaveJSON()"><span class="btn-icon">&#128190;</span> 儲存檔案</button>
+    <button onclick="doLoadJSON()"><span class="btn-icon">&#128194;</span> 載入檔案</button>
+  </div>
+
+  <!-- Edit Modal -->
+  <div class="modal-overlay" id="editModal">
+    <div class="modal">
+      <h3 id="modalTitle">編輯班次</h3>
+      <div class="modal-info" id="modalInfo"></div>
+      <div class="modal-staff-grid" id="modalStaffGrid"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeModal()">取消</button>
+        <button class="btn-confirm" onclick="confirmModal()">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- Hidden file input -->
+  <input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFileLoad(event)">
+</div>
+
+<script>
+// ===== Constants =====
+const SHIFT_NAMES = ['上午', '下午', '晚上'];
+const SHIFT_KEYS  = ['morning', 'afternoon', 'night'];
+const DAY_NAMES   = ['日', '一', '二', '三', '四', '五', '六'];
+const STAFF_COLORS = [
+  '#ef4444','#e67e22','#f59e0b','#84cc16','#22c55e',
+  '#14b8a6','#06b6d4','#3b82f6','#6366f1','#8b5cf6',
+  '#a855f7','#d946ef','#ec4899','#f43f5e','#78716c',
+  '#0ea5e9','#059669','#b45309','#dc2626','#7c3aed',
+  '#0d9488','#4f46e5','#c026d3','#e11d48','#57534e','#2563eb'
+];
+
+// ===== State =====
+let state = {
+  staff: [],
+  constraints: [],
+  schedule: null,   // [dayIndex][shiftIndex] = ['A','B',...]
+  settings: {
+    weeks: 4,
+    startDate: '',
+    staffPerShift: 5,
+    staffCount: 20
+  },
+  nextConstraintId: 1
+};
+
+// ===== Init =====
+function init() {
+  // Default start date = next Monday
+  const today = new Date();
+  const dow = today.getDay();
+  const diff = dow === 0 ? 1 : dow === 1 ? 0 : 8 - dow;
+  const nextMon = new Date(today);
+  nextMon.setDate(today.getDate() + diff);
+  document.getElementById('startDate').value = formatDateInput(nextMon);
+
+  // Load saved state
+  loadFromStorage();
+  syncSettingsToUI();
+  updateStaffList();
+  renderConstraints();
+
+  // If we have a saved schedule, render it
+  if (state.schedule) {
+    renderSchedule();
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('scheduleArea').style.display = 'block';
+    document.getElementById('actionBar').style.display = 'flex';
+  }
+
+  // Check URL for shared schedule
+  if (location.hash.length > 1) {
+    try {
+      const data = JSON.parse(decodeURIComponent(atob(location.hash.slice(1))));
+      if (data.schedule) {
+        state.schedule = data.schedule;
+        state.settings = { ...state.settings, ...data.settings };
+        state.staff = data.staff || state.staff;
+        syncSettingsToUI();
+        renderSchedule();
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('scheduleArea').style.display = 'block';
+        document.getElementById('actionBar').style.display = 'flex';
+      }
+    } catch(e) {}
+  }
+}
+
+function updateStaffList() {
+  const count = state.settings.staffCount;
+  state.staff = [];
+  for (let i = 0; i < count && i < 26; i++) {
+    state.staff.push(String.fromCharCode(65 + i));
+  }
+  // Populate person select
+  const sel = document.getElementById('cbPerson');
+  sel.innerHTML = state.staff.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+
+function updateStaffCount() {
+  const v = parseInt(document.getElementById('staffCount').value) || 20;
+  state.settings.staffCount = Math.max(2, Math.min(26, v));
+  document.getElementById('staffCount').value = state.settings.staffCount;
+  updateStaffList();
+  saveToStorage();
+}
+
+function syncSettingsToUI() {
+  document.getElementById('startDate').value = state.settings.startDate || document.getElementById('startDate').value;
+  document.getElementById('weekCount').value = state.settings.weeks;
+  document.getElementById('staffPerShift').value = state.settings.staffPerShift;
+  document.getElementById('staffCount').value = state.settings.staffCount;
+}
+
+function readSettingsFromUI() {
+  state.settings.startDate = document.getElementById('startDate').value;
+  state.settings.weeks = parseInt(document.getElementById('weekCount').value);
+  state.settings.staffPerShift = parseInt(document.getElementById('staffPerShift').value) || 5;
+}
+
+// ===== Date Utils =====
+function formatDateInput(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function parseDate(s) {
+  const [y,m,d] = s.split('-').map(Number);
+  return new Date(y, m-1, d);
+}
+function addDays(d, n) {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+function formatDateShort(d) {
+  return (d.getMonth()+1) + '/' + d.getDate();
+}
+function formatDateFull(d) {
+  return d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate();
+}
+
+// ===== Constraints =====
+function addConstraint() {
+  const person = document.getElementById('cbPerson').value;
+  const day    = parseInt(document.getElementById('cbDay').value);
+  const shift  = parseInt(document.getElementById('cbShift').value);
+  const type   = document.getElementById('cbType').value;
+
+  // Check for duplicate
+  const dup = state.constraints.find(c =>
+    c.person === person && c.day === day && c.shift === shift && c.type === type
+  );
+  if (dup) { showToast('此條件已存在'); return; }
+
+  state.constraints.push({
+    id: state.nextConstraintId++,
+    person, day, shift, type
+  });
+  renderConstraints();
+  saveToStorage();
+  showToast('條件已新增');
+}
+
+function removeConstraint(id) {
+  state.constraints = state.constraints.filter(c => c.id !== id);
+  renderConstraints();
+  saveToStorage();
+}
+
+function renderConstraints() {
+  const list = document.getElementById('constraintList');
+  document.getElementById('constraintCount').textContent = state.constraints.length;
+  if (state.constraints.length === 0) {
+    list.innerHTML = '<div style="color:var(--text2);font-size:.82rem;padding:8px;">尚無條件</div>';
+    return;
+  }
+  list.innerHTML = state.constraints.map(c => {
+    const icon = c.type === 'cannot' ? '&#128683;' : '&#9989;';
+    const dayText = c.day === -1 ? '每天' : '每週' + DAY_NAMES[c.day];
+    const shiftText = c.shift === -1 ? '任何班' : SHIFT_NAMES[c.shift] + '班';
+    const typeText = c.type === 'cannot' ? '不能排班' : '必須排班';
+    return `<div class="constraint-item">
+      <span class="ci-icon">${icon}</span>
+      <span class="ci-text"><strong>${c.person}</strong> ${dayText} ${shiftText} ${typeText}</span>
+      <button class="ci-del" onclick="removeConstraint(${c.id})" title="刪除">&times;</button>
+    </div>`;
+  }).join('');
+}
+
+function isConstrained(person, dayOfWeek, shiftIndex) {
+  return state.constraints.some(c => {
+    if (c.person !== person) return false;
+    if (c.day !== -1 && c.day !== dayOfWeek) return false;
+    if (c.shift !== -1 && c.shift !== shiftIndex) return false;
+    return c.type === 'cannot';
+  });
+}
+
+function isMustWork(person, dayOfWeek, shiftIndex) {
+  return state.constraints.some(c => {
+    if (c.person !== person) return false;
+    if (c.day !== -1 && c.day !== dayOfWeek) return false;
+    if (c.shift !== -1 && c.shift !== shiftIndex) return false;
+    return c.type === 'must';
+  });
+}
+
+// ===== Schedule Generation =====
+function generateSchedule() {
+  readSettingsFromUI();
+  const { weeks, staffPerShift } = state.settings;
+  const startDate = parseDate(state.settings.startDate);
+  const totalDays = weeks * 7;
+  const staff = [...state.staff];
+  let schedule = [];
+
+  // Stats tracking
+  let stats = {};
+  staff.forEach(s => {
+    stats[s] = { total: 0, morning: 0, afternoon: 0, night: 0, weekday: 0, weekend: 0 };
+  });
+
+  for (let d = 0; d < totalDays; d++) {
+    schedule[d] = [[], [], []];
+    const date = addDays(startDate, d);
+    const dow = date.getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const assignedToday = new Set();
+
+    for (let s = 0; s < 3; s++) {
+      let assigned = [];
+
+      // 1) Handle "must" constraints first
+      staff.forEach(p => {
+        if (assignedToday.has(p)) return;
+        if (isMustWork(p, dow, s) && !isConstrained(p, dow, s)) {
+          assigned.push(p);
+          assignedToday.add(p);
+        }
+      });
+
+      // 2) Fill remaining slots
+      const remaining = staffPerShift - assigned.length;
+      if (remaining > 0) {
+        const candidates = staff.filter(p => {
+          if (assignedToday.has(p)) return false;
+          if (assigned.includes(p)) return false;
+          if (isConstrained(p, dow, s)) return false;
+          return true;
+        });
+
+        // Score: fewer shifts = higher priority (fairer)
+        candidates.sort((a, b) => {
+          const sa = stats[a], sb = stats[b];
+          const totalDiff = sa.total - sb.total;
+          if (totalDiff !== 0) return totalDiff;
+          const typeDiff = sa[SHIFT_KEYS[s]] - sb[SHIFT_KEYS[s]];
+          if (typeDiff !== 0) return typeDiff;
+          // Weekend fairness
+          if (isWeekend) {
+            const weDiff = sa.weekend - sb.weekend;
+            if (weDiff !== 0) return weDiff;
+          }
+          return Math.random() - 0.5;
+        });
+
+        for (let i = 0; i < Math.min(remaining, candidates.length); i++) {
+          assigned.push(candidates[i]);
+          assignedToday.add(candidates[i]);
+        }
+      }
+
+      schedule[d][s] = assigned;
+
+      // Update stats
+      assigned.forEach(p => {
+        stats[p].total++;
+        stats[p][SHIFT_KEYS[s]]++;
+        if (isWeekend) stats[p].weekend++;
+        else stats[p].weekday++;
+      });
+    }
+  }
+
+  return { schedule, stats };
+}
+
+function doGenerate() {
+  readSettingsFromUI();
+  if (!state.settings.startDate) {
+    showToast('請先設定起始日期');
+    return;
+  }
+
+  // Run multiple times, pick best fairness
+  let best = null, bestScore = Infinity;
+  for (let i = 0; i < 200; i++) {
+    const result = generateSchedule();
+    const score = fairnessScore(result.stats);
+    if (score < bestScore) {
+      best = result;
+      bestScore = score;
+    }
+  }
+
+  state.schedule = best.schedule;
+  renderSchedule();
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('scheduleArea').style.display = 'block';
+  document.getElementById('actionBar').style.display = 'flex';
+  saveToStorage();
+  showToast('排班完成！');
+}
+
+function fairnessScore(stats) {
+  const totals = Object.values(stats).map(s => s.total);
+  const mean = totals.reduce((a,b) => a+b, 0) / totals.length;
+  const variance = totals.reduce((a,t) => a + (t-mean)**2, 0) / totals.length;
+  return Math.sqrt(variance);
+}
+
+// ===== Render Schedule =====
+function renderSchedule() {
+  const area = document.getElementById('scheduleArea');
+  if (!state.schedule) return;
+
+  readSettingsFromUI();
+  const startDate = parseDate(state.settings.startDate);
+  const weeks = state.settings.weeks;
+  let html = '';
+
+  for (let w = 0; w < weeks; w++) {
+    const weekStart = addDays(startDate, w * 7);
+    const weekEnd = addDays(startDate, w * 7 + 6);
+    html += `<div class="week-block">
+      <div class="week-header">
+        <span>第 ${w+1} 週</span>
+        <span class="date-range">${formatDateFull(weekStart)} ~ ${formatDateFull(weekEnd)}</span>
+      </div>
+      <div class="schedule-scroll">
+        <div class="schedule-grid">`;
+
+    // Day headers (Mon first: 1,2,3,4,5,6,0)
+    const dayOrder = [1,2,3,4,5,6,0];
+    html += '<div class="sg-corner"></div>';
+    dayOrder.forEach(dow => {
+      const dayIdx = w * 7 + (dow === 0 ? 6 : dow - 1);
+      const date = addDays(startDate, dayIdx);
+      const isWE = dow === 0 || dow === 6;
+      html += `<div class="sg-day-header${isWE ? ' weekend' : ''}">
+        <span class="day-name">週${DAY_NAMES[dow]}</span>
+        <span class="day-date">${formatDateShort(date)}</span>
+      </div>`;
+    });
+
+    // Shift rows
+    for (let s = 0; s < 3; s++) {
+      html += `<div class="sg-shift-label ${SHIFT_KEYS[s]}"><span class="dot"></span>${SHIFT_NAMES[s]}</div>`;
+      dayOrder.forEach(dow => {
+        const dayIdx = w * 7 + (dow === 0 ? 6 : dow - 1);
+        const isWE = dow === 0 || dow === 6;
+        const assigned = (state.schedule[dayIdx] && state.schedule[dayIdx][s]) || [];
+        const badges = assigned.map(p =>
+          `<span class="staff-badge" style="background:${getStaffColor(p)}">${p}</span>`
+        ).join('');
+        html += `<div class="sg-cell${isWE ? ' weekend' : ''}" onclick="openEditModal(${dayIdx},${s})" title="點擊編輯">${badges}</div>`;
+      });
+    }
+
+    html += '</div></div></div>';
+  }
+
+  // Statistics
+  html += renderStats();
+
+  area.innerHTML = html;
+}
+
+function getStaffColor(person) {
+  const idx = person.charCodeAt(0) - 65;
+  return STAFF_COLORS[idx % STAFF_COLORS.length];
+}
+
+function renderStats() {
+  if (!state.schedule) return '';
+  const startDate = parseDate(state.settings.startDate);
+  const stats = {};
+  state.staff.forEach(s => {
+    stats[s] = { total: 0, morning: 0, afternoon: 0, night: 0, weekday: 0, weekend: 0 };
+  });
+
+  state.schedule.forEach((day, dIdx) => {
+    const date = addDays(startDate, dIdx);
+    const dow = date.getDay();
+    const isWE = dow === 0 || dow === 6;
+    day.forEach((shift, sIdx) => {
+      shift.forEach(p => {
+        if (!stats[p]) return;
+        stats[p].total++;
+        stats[p][SHIFT_KEYS[sIdx]]++;
+        if (isWE) stats[p].weekend++;
+        else stats[p].weekday++;
+      });
+    });
+  });
+
+  const totals = Object.values(stats).map(s => s.total);
+  const maxT = Math.max(...totals), minT = Math.min(...totals);
+
+  let rows = state.staff.map(p => {
+    const s = stats[p];
+    const tc = s.total === maxT && maxT !== minT ? ' highlight-max' : s.total === minT && maxT !== minT ? ' highlight-min' : '';
+    return `<tr>
+      <td class="person-col"><span class="staff-badge" style="background:${getStaffColor(p)};font-size:.7rem;">${p}</span></td>
+      <td>${s.morning}</td><td>${s.afternoon}</td><td>${s.night}</td>
+      <td>${s.weekday}</td><td>${s.weekend}</td>
+      <td class="${tc}">${s.total}</td>
+    </tr>`;
+  }).join('');
+
+  const score = fairnessScore(stats);
+  return `<div class="stats-block">
+    <h3>排班統計</h3>
+    <div style="overflow-x:auto;">
+      <table class="stats-table">
+        <tr><th>人員</th><th>上午</th><th>下午</th><th>晚上</th><th>平日</th><th>假日</th><th>合計</th></tr>
+        ${rows}
+      </table>
+    </div>
+    <div class="fairness-score">公平性指數: ${score.toFixed(2)} (越低越公平，0 為完全公平)</div>
+  </div>`;
+}
+
+// ===== Edit Modal =====
+let editCtx = null;
+
+function openEditModal(dayIdx, shiftIdx) {
+  if (!state.schedule) return;
+  editCtx = { dayIdx, shiftIdx };
+  const startDate = parseDate(state.settings.startDate);
+  const date = addDays(startDate, dayIdx);
+  const dow = date.getDay();
+
+  document.getElementById('modalTitle').textContent = '編輯班次';
+  document.getElementById('modalInfo').textContent =
+    `${formatDateFull(date)} 週${DAY_NAMES[dow]} ${SHIFT_NAMES[shiftIdx]}班`;
+
+  const currentAssigned = new Set(state.schedule[dayIdx][shiftIdx]);
+  // People already assigned to OTHER shifts this day
+  const assignedOther = new Set();
+  state.schedule[dayIdx].forEach((shift, si) => {
+    if (si !== shiftIdx) shift.forEach(p => assignedOther.add(p));
+  });
+
+  const grid = document.getElementById('modalStaffGrid');
+  grid.innerHTML = state.staff.map(p => {
+    const constrained = isConstrained(p, dow, shiftIdx);
+    const inOther = assignedOther.has(p);
+    const selected = currentAssigned.has(p);
+    let cls = 'modal-staff-btn';
+    if (selected) cls += ' selected';
+    if (constrained) cls += ' constrained';
+    else if (inOther) cls += ' assigned-other';
+    const title = constrained ? '(受限制)' : inOther ? '(已排其他班)' : '';
+    return `<button class="${cls}" data-person="${p}" onclick="toggleModalStaff(this)"
+      ${constrained ? 'disabled' : ''} title="${title}">${p}</button>`;
+  }).join('');
+
+  document.getElementById('editModal').classList.add('active');
+}
+
+function toggleModalStaff(btn) {
+  if (btn.classList.contains('constrained')) return;
+  btn.classList.toggle('selected');
+  // If was in "assigned-other", warn but allow
+  if (btn.classList.contains('assigned-other') && btn.classList.contains('selected')) {
+    btn.title = '(注意: 此人同日已排其他班)';
+  }
+}
+
+function confirmModal() {
+  if (!editCtx) return;
+  const btns = document.querySelectorAll('#modalStaffGrid .modal-staff-btn.selected');
+  const assigned = Array.from(btns).map(b => b.dataset.person);
+  state.schedule[editCtx.dayIdx][editCtx.shiftIdx] = assigned;
+  closeModal();
+  renderSchedule();
+  saveToStorage();
+  showToast('班次已更新');
+}
+
+function closeModal() {
+  document.getElementById('editModal').classList.remove('active');
+  editCtx = null;
+}
+
+// Close modal on Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ===== Export / Share =====
+function doPrint() { window.print(); }
+
+function doCopyText() {
+  if (!state.schedule) return;
+  const startDate = parseDate(state.settings.startDate);
+  const weeks = state.settings.weeks;
+  let text = '';
+
+  for (let w = 0; w < weeks; w++) {
+    const ws = addDays(startDate, w*7);
+    const we = addDays(startDate, w*7+6);
+    text += `\n===== 第${w+1}週 (${formatDateFull(ws)} ~ ${formatDateFull(we)}) =====\n`;
+    text += padR('', 8);
+    [1,2,3,4,5,6,0].forEach(dow => { text += padR('週' + DAY_NAMES[dow], 12); });
+    text += '\n';
+
+    for (let s = 0; s < 3; s++) {
+      text += padR(SHIFT_NAMES[s], 8);
+      [1,2,3,4,5,6,0].forEach(dow => {
+        const dayIdx = w*7 + (dow===0?6:dow-1);
+        const assigned = (state.schedule[dayIdx] && state.schedule[dayIdx][s]) || [];
+        text += padR(assigned.join(','), 12);
+      });
+      text += '\n';
+    }
+  }
+
+  navigator.clipboard.writeText(text).then(() => showToast('已複製到剪貼簿'));
+}
+
+function padR(s, len) {
+  while (s.length < len) s += ' ';
+  return s;
+}
+
+function doDownloadHTML() {
+  if (!state.schedule) return;
+  const startDate = parseDate(state.settings.startDate);
+  const weeks = state.settings.weeks;
+  const endDate = addDays(startDate, weeks * 7 - 1);
+
+  let tableHTML = '';
+  for (let w = 0; w < weeks; w++) {
+    const ws = addDays(startDate, w*7);
+    const we = addDays(startDate, w*7+6);
+    tableHTML += `<h2 style="margin:18px 0 8px;">第 ${w+1} 週 <small style="font-weight:400;color:#666;">${formatDateFull(ws)} ~ ${formatDateFull(we)}</small></h2>`;
+    tableHTML += '<table><tr><th></th>';
+    [1,2,3,4,5,6,0].forEach(dow => {
+      const dayIdx = w*7 + (dow===0?6:dow-1);
+      const date = addDays(startDate, dayIdx);
+      const isWE = dow===0||dow===6;
+      tableHTML += `<th style="${isWE?'background:#fff1f2;':''}">週${DAY_NAMES[dow]}<br><small>${formatDateShort(date)}</small></th>`;
+    });
+    tableHTML += '</tr>';
+
+    const shiftBg = ['#fffbeb','#eff6ff','#f5f3ff'];
+    for (let s = 0; s < 3; s++) {
+      tableHTML += `<tr><td style="background:${shiftBg[s]};font-weight:600;">${SHIFT_NAMES[s]}</td>`;
+      [1,2,3,4,5,6,0].forEach(dow => {
+        const dayIdx = w*7 + (dow===0?6:dow-1);
+        const isWE = dow===0||dow===6;
+        const assigned = (state.schedule[dayIdx] && state.schedule[dayIdx][s]) || [];
+        const badges = assigned.map(p =>
+          `<span style="display:inline-block;background:${getStaffColor(p)};color:#fff;padding:2px 7px;border-radius:4px;font-weight:700;font-size:13px;margin:1px;">${p}</span>`
+        ).join(' ');
+        tableHTML += `<td style="${isWE?'background:#fffbfb;':''}">${badges}</td>`;
+      });
+      tableHTML += '</tr>';
+    }
+    tableHTML += '</table>';
+  }
+
+  const shareHTML = `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8">
+<title>排班表 ${formatDateFull(startDate)} ~ ${formatDateFull(endDate)}</title>
+<style>
+body{font-family:"Segoe UI","Microsoft JhengHei",sans-serif;max-width:1100px;margin:0 auto;padding:20px;color:#1e293b;}
+h1{text-align:center;color:#1e40af;margin-bottom:4px;}
+.subtitle{text-align:center;color:#64748b;margin-bottom:20px;font-size:.9rem;}
+table{width:100%;border-collapse:collapse;margin-bottom:10px;}
+th,td{border:1px solid #e2e8f0;padding:8px;text-align:center;font-size:14px;}
+th{background:#f8fafc;}
+@media print{body{padding:0;}@page{margin:10mm;size:landscape;}}
+</style></head><body>
+<h1>排班表</h1>
+<div class="subtitle">${formatDateFull(startDate)} ~ ${formatDateFull(endDate)}</div>
+${tableHTML}
+<div style="text-align:center;color:#94a3b8;font-size:12px;margin-top:20px;">由排班管理系統產生</div>
+</body></html>`;
+
+  const blob = new Blob([shareHTML], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `排班表_${state.settings.startDate}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('分享頁面已下載');
+}
+
+function doSaveJSON() {
+  const data = {
+    staff: state.staff,
+    constraints: state.constraints,
+    schedule: state.schedule,
+    settings: state.settings,
+    nextConstraintId: state.nextConstraintId,
+    savedAt: new Date().toISOString()
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `排班資料_${state.settings.startDate || 'draft'}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('檔案已儲存');
+}
+
+function doLoadJSON() {
+  document.getElementById('fileInput').click();
+}
+
+function handleFileLoad(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (data.staff) state.staff = data.staff;
+      if (data.constraints) state.constraints = data.constraints;
+      if (data.schedule) state.schedule = data.schedule;
+      if (data.settings) state.settings = { ...state.settings, ...data.settings };
+      if (data.nextConstraintId) state.nextConstraintId = data.nextConstraintId;
+
+      syncSettingsToUI();
+      updateStaffList();
+      renderConstraints();
+      if (state.schedule) {
+        renderSchedule();
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('scheduleArea').style.display = 'block';
+        document.getElementById('actionBar').style.display = 'flex';
+      }
+      saveToStorage();
+      showToast('檔案已載入');
+    } catch(err) {
+      showToast('檔案格式錯誤');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+// ===== Local Storage =====
+const STORAGE_KEY = 'scheduler_state';
+
+function saveToStorage() {
+  try {
+    readSettingsFromUI();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      staff: state.staff,
+      constraints: state.constraints,
+      schedule: state.schedule,
+      settings: state.settings,
+      nextConstraintId: state.nextConstraintId
+    }));
+  } catch(e) {}
+}
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data.staff) state.staff = data.staff;
+    if (data.constraints) state.constraints = data.constraints;
+    if (data.schedule) state.schedule = data.schedule;
+    if (data.settings) state.settings = { ...state.settings, ...data.settings };
+    if (data.nextConstraintId) state.nextConstraintId = data.nextConstraintId;
+  } catch(e) {}
+}
+
+// ===== Sidebar Toggle =====
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarOverlay').classList.toggle('open');
+}
+
+// ===== Toast =====
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ===== Start =====
+init();
+</script>
+</body>
+</html>
